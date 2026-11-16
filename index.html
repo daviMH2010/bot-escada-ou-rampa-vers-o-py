@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IA — Escadas e rampas em tempo real</title>
+<style>
+:root{font-family:system-ui,Arial,sans-serif;color:#172033;background:#f4f6fb}
+*{box-sizing:border-box}body{max-width:980px;margin:28px auto;padding:0 16px}
+h1{margin-bottom:4px}.sub{color:#586174;margin-top:0}
+.panel{background:white;border:1px solid #e1e6ef;border-radius:16px;padding:18px;margin:16px 0;box-shadow:0 5px 18px #15264a0b}
+.viewer{position:relative;background:#101827;border-radius:12px;overflow:hidden;min-height:220px;display:grid;place-items:center}
+video{width:100%;max-height:560px;object-fit:contain;display:block}
+.placeholder{color:#d5dbea;padding:36px;text-align:center}
+.controls{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+button{border:0;border-radius:10px;padding:11px 16px;font:inherit;font-weight:650;cursor:pointer;background:#2459d3;color:white}
+button.secondary{background:#e9eef9;color:#20345f}button:disabled{opacity:.45;cursor:not-allowed}
+#status{margin-top:12px;color:#536078}.result{padding:13px 0;border-bottom:1px solid #edf0f5}
+.bar{height:12px;background:#e9edf4;border-radius:20px;overflow:hidden;margin-top:6px}
+.fill{height:100%;background:#2459d3;width:0;transition:width .15s}
+.topresult{font-size:1.25rem;font-weight:750}.muted{font-size:.9rem;color:#667085}
+.note{font-size:.88rem;color:#667085;line-height:1.5}
+@media(max-width:600px){body{margin:16px auto}.panel{padding:13px}}
+</style>
+</head>
+<body>
+<h1>Minha IA: escadas ou rampas</h1>
+<p class="sub">Classificação contínua usando a câmera do dispositivo.</p>
+<section class="panel">
+  <div class="viewer">
+    <video id="camera" autoplay playsinline muted></video>
+    <div class="placeholder" id="placeholder">A câmera ainda não foi iniciada.</div>
+  </div>
+  <div class="controls">
+    <button id="start">Iniciar câmera e análise</button>
+    <button id="stop" class="secondary" disabled>Parar</button>
+  </div>
+  <div id="status" role="status">Carregando modelo de escadas e rampas…</div>
+</section>
+<section class="panel">
+  <div class="topresult" id="winner">Aguardando câmera</div>
+  <div class="muted" id="confidence">Aponte a câmera para uma escada ou rampa.</div>
+  <div id="results"></div>
+</section>
+<p class="note">O modelo original do arquivo foi mantido (classes: escadas e rampas). A análise é uma estimativa baseada no que aparece no enquadramento; iluminação, distância, ângulo e objetos parcialmente visíveis podem afetar o resultado. A câmera é processada localmente no navegador e não é enviada para um servidor.</p>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.7.4/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8/dist/teachablemachine-image.min.js"></script>
+<script>
+let model=null, stream=null, running=false, busy=false, lastRun=0;
+const video=document.getElementById('camera');
+const placeholder=document.getElementById('placeholder');
+const statusEl=document.getElementById('status');
+const startBtn=document.getElementById('start');
+const stopBtn=document.getElementById('stop');
+const winner=document.getElementById('winner');
+const confidence=document.getElementById('confidence');
+const results=document.getElementById('results');
+
+async function loadModel(){
+  try{
+    model=await tmImage.load('./model.json','./metadata.json');
+    statusEl.textContent='Modelo carregado. Autorize a câmera para começar.';
+    startBtn.disabled=false;
+  }catch(err){
+    statusEl.textContent='Falha ao carregar o modelo. Confirme que o servidor Python está aberto e os arquivos do modelo estão na mesma pasta.';
+    startBtn.disabled=true; console.error(err);
+  }
+}
+async function startCamera(){
+  if(!model || running) return;
+  try{
+    statusEl.textContent='Solicitando acesso à câmera…';
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
+    video.srcObject=stream;
+    await video.play();
+    placeholder.hidden=true; running=true;
+    startBtn.disabled=true; stopBtn.disabled=false;
+    statusEl.textContent='Analisando em tempo real. Mantenha escadas ou rampas visíveis no enquadramento.';
+    requestAnimationFrame(loop);
+  }catch(err){
+    statusEl.textContent=err.name==='NotAllowedError'
+      ?'Permissão da câmera negada. Autorize o acesso nas configurações do navegador.'
+      :'Não foi possível iniciar a câmera: '+err.message;
+    console.error(err);
+  }
+}
+function stopCamera(){
+  running=false;
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
+  video.srcObject=null; placeholder.hidden=false;
+  startBtn.disabled=!model; stopBtn.disabled=true;
+  statusEl.textContent='Câmera parada.';
+}
+async function loop(now){
+  if(!running) return;
+  if(!busy && now-lastRun>=220 && video.readyState>=2){
+    busy=true; lastRun=now;
+    try{
+      const predictions=await model.predict(video);
+      predictions.sort((a,b)=>b.probability-a.probability);
+      const best=predictions[0];
+      winner.textContent=best.className;
+      confidence.textContent='Confiança estimada: '+(best.probability*100).toFixed(1)+'%';
+      results.innerHTML=predictions.map(p=>{
+        const pct=(p.probability*100).toFixed(1);
+        const safeName=String(p.className).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        return `<div class="result"><strong>${safeName}</strong> — ${pct}%<div class="bar"><div class="fill" style="width:${pct}%"></div></div></div>`;
+      }).join('');
+    }catch(err){statusEl.textContent='Erro durante a análise: '+err.message;console.error(err);}
+    finally{busy=false;}
+  }
+  if(running) requestAnimationFrame(loop);
+}
+startBtn.addEventListener('click',startCamera);
+stopBtn.addEventListener('click',stopCamera);
+window.addEventListener('beforeunload',stopCamera);
+startBtn.disabled=true;
+loadModel();
+</script>
+</body>
+</html>

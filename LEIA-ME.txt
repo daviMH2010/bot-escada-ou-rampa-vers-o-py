@@ -1,0 +1,27 @@
+IA — ESCADAS E RAMPAS EM TEMPO REAL
+
+O que faz
+- Reutiliza o modelo Teachable Machine fornecido no ZIP original.
+- Abre a câmera do dispositivo pelo navegador.
+- Classifica continuamente o enquadramento como "escadas" ou "rampas".
+- Exibe a classe mais provável e a confiança estimada.
+
+Como executar
+1. Extraia esta pasta do ZIP.
+2. Tenha Python 3 instalado (não requer instalar bibliotecas extras).
+3. Execute iniciar.bat no Windows ou, em qualquer sistema, rode:
+       python iniciar.py
+4. O navegador abrirá http://localhost:8000.
+5. Clique em "Iniciar câmera e análise" e permita o acesso à câmera.
+6. Para encerrar, clique em "Parar" e feche o terminal com Ctrl+C.
+
+Importante
+- Abra pelo servidor Python; não abra index.html com duplo clique.
+- O acesso à câmera funciona em localhost. Em outros dispositivos pela rede,
+  navegadores normalmente exigem HTTPS para liberar a câmera.
+- É necessária internet na primeira abertura para baixar TensorFlow.js e
+  Teachable Machine pelo CDN.
+- Mantenha model.json, metadata.json e weights.bin junto de index.html.
+- O modelo só foi treinado para as classes escadas e rampas. Não reconhece
+  automaticamente outros tipos de objetos.
+- A classificação é uma estimativa, não uma garantia de segurança.
