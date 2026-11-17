@@ -100,8 +100,9 @@ async function loop(now){
       const predictions=await model.predict(video);
       predictions.sort((a,b)=>b.probability-a.probability);
       const best=predictions[0];
-      winner.textContent=best.className;
-      confidence.textContent='Confiança estimada: '+(best.probability*100).toFixed(1)+'%';
+      const isInconclusive=best.probability<0.8;
+      winner.textContent=isInconclusive?'Inconclusivo':best.className;
+      confidence.textContent=isInconclusive ? 'Resultado inconclusivo (abaixo de 80%).' : 'Confiança estimada: '+(best.probability*100).toFixed(1)+'%';
       results.innerHTML=predictions.map(p=>{
         const pct=(p.probability*100).toFixed(1);
         const safeName=String(p.className).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
